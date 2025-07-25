@@ -41,6 +41,7 @@ function M:transform_tool(tool)
       name = tool.name,
       description = tool.get_description and tool.get_description() or tool.description,
       parameters = parameters,
+      strict = true,
     },
   }
   return res
