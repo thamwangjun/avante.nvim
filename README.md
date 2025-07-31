@@ -1432,3 +1432,87 @@ avante.nvim is licensed under the Apache 2.0 License. For more details, please r
     </picture>
   </a>
 </p>
+
+## Mouse Resize Feature
+
+Avante.nvim supports resizing the sidebar using intuitive mouse drag operations. The feature provides smooth, real-time resizing with enhanced reliability across all sidebar positions and usage scenarios.
+
+### Configuration
+
+Add the following to your configuration to enable/customize mouse resizing:
+
+```lua
+require('avante').setup({
+  windows = {
+    position = "right",  -- "right" | "left" | "top" | "bottom" | "smart"
+    mouse_resize = {
+      enabled = true,           -- Enable mouse drag to resize sidebar
+      min_width = 15,          -- Minimum width percentage (for left/right sidebars)
+      max_width = 70,          -- Maximum width percentage (for left/right sidebars)
+      min_height = 10,         -- Minimum height percentage (for top/bottom sidebars)
+      max_height = 80,         -- Maximum height percentage (for top/bottom sidebars)
+      resize_zone_width = 3,   -- Width of the resize zone in columns/rows (edge detection area)
+    },
+    -- ... other window settings
+  },
+  -- ... other settings
+})
+```
+
+### Usage
+
+1. **Mouse Drag Resize**: Click and drag the edge of the sidebar to resize it
+   - **Right sidebar**: Drag the left edge to change width
+   - **Left sidebar**: Drag the right edge to change width  
+   - **Bottom sidebar**: Drag the top edge to change height
+   - **Top sidebar**: Drag the bottom edge to change height
+   - **Smart position**: Automatically adapts to current layout
+   - The cursor changes to a resize indicator when hovering over the resize zone
+   - Works reliably whether sidebar buffers or other buffers are active
+
+2. **Programmatic Resize**:
+   ```lua
+   -- Set specific size (25% of screen width/height depending on sidebar position)
+   require('avante.api').resize_sidebar(25)
+   
+   -- Prompt user for size (interactive input)
+   require('avante.api').resize_sidebar()
+   ```
+
+3. **Command Line Interface**:
+   ```vim
+   " Set specific size percentage
+   :AvanteResize 25
+   
+   " Interactive prompt for size
+   :AvanteResize
+   ```
+
+### Enhanced Features
+
+- **Universal Position Support**: Works with all 5 sidebar positions (`right`, `left`, `top`, `bottom`, `smart`)
+- **Robust Event Handling**: Enhanced global keymap system prevents buffer-specific conflicts
+- **Smart Edge Detection**: Automatically detects the correct resize edge based on sidebar position
+- **Adaptive Sizing**: Width control for vertical layouts, height control for horizontal layouts
+- **Configurable Constraints**: Separate min/max limits for width and height
+- **Real-time Feedback**: Smooth resizing with live preview and throttled rendering
+- **Persistent Configuration**: Size changes are maintained throughout the session
+- **Multi-Container Synchronization**: All sidebar containers resize together seamlessly
+- **Buffer-Agnostic Operation**: Reliable resizing regardless of which buffer is currently active
+- **Performance Optimized**: Throttled updates during drag operations for smooth performance
+
+### Technical Details
+
+The mouse resize implementation uses:
+- **Global keymaps** with high priority (`noremap = true`) for universal event capture
+- **Autocmd-based event delegation** for reliable processing across different buffer types
+- **Intelligent edge detection** that adapts to sidebar position and screen layout
+- **Percentage-based calculations** for consistent sizing across different screen resolutions
+- **Graceful fallback** to normal mouse behavior when not in resize mode
+
+### Requirements
+
+- Neovim with mouse support enabled (`set mouse=a`)
+- Works with all sidebar positions: `right`, `left`, `top`, `bottom`, and `smart`
+- Compatible with all Neovim modes: normal, visual, and insert
+- No additional dependencies required

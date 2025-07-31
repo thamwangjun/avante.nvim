@@ -139,6 +139,27 @@ function Sidebar:reset()
   self.scroll = true
   self.old_result_lines = {}
   self.token_count = nil
+  
+  -- Clean up mouse resize state
+  if self.mouse_resize_state then
+    self.mouse_resize_state = nil
+  end
+  
+  -- Clean up resize render timer
+  if self._resize_render_timer then
+    self._resize_render_timer:stop()
+    self._resize_render_timer = nil
+  end
+  
+  -- Mouse events handled by global keymaps (cleaned up above)
+  
+  -- Clean up global mouse keymaps
+  if self._global_mouse_keymaps then
+    for _, keymap in ipairs(self._global_mouse_keymaps) do
+      pcall(vim.keymap.del, keymap.mode, keymap.lhs)
+    end
+    self._global_mouse_keymaps = nil
+  end
 end
 
 ---@class SidebarOpenOptions: AskOptions
@@ -1186,6 +1207,9 @@ end
 ---@param opts AskOptions
 function Sidebar:on_mount(opts)
   self:setup_window_navigation(self.containers.result)
+  
+  -- Setup mouse resize functionality
+  self:setup_mouse_resize()
 
   -- Add keymap to add current buffer while sidebar is open
   if Config.mappings.files and Config.mappings.files.add_current then
@@ -1478,6 +1502,424 @@ function Sidebar:resize()
   vim.defer_fn(function() vim.cmd("AvanteRefresh") end, 200)
 end
 
+local function calculate_config_window_position()
+  local position = Config.windows.position
+  if position == "smart" then
+    -- get editor width
+    local editor_width = vim.o.columns
+    -- get editor height
+    local editor_height = vim.o.lines * 3
+
+    if editor_width > editor_height then
+      position = "right"
+    else
+      position = "bottom"
+    end
+  end
+
+  ---@cast position -"smart", -string
+  return position
+end
+
+---Setup mouse resize functionality for the sidebar
+function Sidebar:setup_mouse_resize()
+  if not Config.windows.mouse_resize.enabled then return end
+
+  -- Mouse drag state
+  self.mouse_resize_state = {
+    is_dragging = false,
+    start_x = 0,
+    start_y = 0,
+    start_width = 0,
+    start_height = 0,
+    original_config_width = Config.windows.width,
+    original_config_height = Config.windows.height,
+  }
+
+  local function get_sidebar_edge_info()
+    if not self.containers.result or not api.nvim_win_is_valid(self.containers.result.winid) then 
+      return nil 
+    end
+    
+    local win_pos = api.nvim_win_get_position(self.containers.result.winid)
+    local win_width = api.nvim_win_get_width(self.containers.result.winid)
+    local win_height = api.nvim_win_get_height(self.containers.result.winid)
+    local sidebar_position = calculate_config_window_position()
+    
+    -- Calculate resize edge based on sidebar position
+    local resize_edge_col, resize_edge_row
+    
+    if sidebar_position == "left" then
+      -- For left sidebar, resize edge is the right edge of the window
+      resize_edge_col = win_pos[2] + win_width - 1
+      resize_edge_row = nil -- Not applicable for vertical sidebars
+    elseif sidebar_position == "right" then
+      -- For right sidebar, resize edge is the left edge of the window
+      resize_edge_col = win_pos[2]
+      resize_edge_row = nil -- Not applicable for vertical sidebars
+    elseif sidebar_position == "bottom" then
+      -- For bottom sidebar, resize edge is the top edge of the window
+      resize_edge_col = nil -- Not applicable for horizontal sidebars
+      resize_edge_row = win_pos[1]
+    elseif sidebar_position == "top" then
+      -- For top sidebar, resize edge is the bottom edge of the window
+      resize_edge_col = nil -- Not applicable for horizontal sidebars
+      resize_edge_row = win_pos[1] + win_height - 1
+    else
+      -- Fallback to right sidebar behavior
+      resize_edge_col = win_pos[2]
+      resize_edge_row = nil
+    end
+    
+    return {
+      position = sidebar_position,
+      win_col = win_pos[2],
+      win_width = win_width,
+      win_height = win_height,
+      resize_edge_col = resize_edge_col,
+      resize_edge_row = resize_edge_row,
+      win_row = win_pos[1],
+    }
+  end
+
+  local function is_in_resize_zone(mouse_pos, edge_info)
+    -- Ensure we have valid coordinates and edge info
+    if not mouse_pos or not edge_info then return false end
+    
+    -- Check for vertical sidebars (left/right) - use column detection
+    if edge_info.resize_edge_col then
+      if not mouse_pos.wincol then return false end
+      local edge_distance = math.abs(mouse_pos.wincol - edge_info.resize_edge_col)
+      return edge_distance <= Config.windows.mouse_resize.resize_zone_width
+    end
+    
+    -- Check for horizontal sidebars (top/bottom) - use row detection  
+    if edge_info.resize_edge_row then
+      if not mouse_pos.winrow then return false end
+      local edge_distance = math.abs(mouse_pos.winrow - edge_info.resize_edge_row)
+      return edge_distance <= Config.windows.mouse_resize.resize_zone_width
+    end
+    
+    return false
+  end
+
+  local function update_cursor_for_resize_zone()
+    local edge_info = get_sidebar_edge_info()
+    if not edge_info then return end
+    
+    local mouse_pos = vim.fn.getmousepos()
+    
+    if is_in_resize_zone(mouse_pos, edge_info) then
+      vim.opt.mouse = "a" -- Ensure mouse is enabled
+    end
+  end
+
+  local function calculate_new_width(mouse_x)
+    local editor_width = vim.o.columns
+    local edge_info = get_sidebar_edge_info()
+    
+    if not edge_info then 
+      return Config.windows.width 
+    end
+    
+    local new_width_cols
+    
+    if edge_info.position == "left" then
+      -- For left sidebar: width = distance from left edge of screen to mouse position
+      new_width_cols = math.max(10, mouse_x)
+    else -- right sidebar (default)
+      -- For right sidebar: width = distance from mouse to right edge of screen
+      new_width_cols = math.max(10, editor_width - mouse_x)
+    end
+    
+    -- Convert to percentage
+    local new_width_percent = (new_width_cols / editor_width) * 100
+    
+    -- Apply configured constraints
+    new_width_percent = math.max(Config.windows.mouse_resize.min_width, new_width_percent)
+    new_width_percent = math.min(Config.windows.mouse_resize.max_width, new_width_percent)
+    
+    return new_width_percent
+  end
+
+  local function calculate_new_height(mouse_y)
+    local editor_height = vim.o.lines
+    local edge_info = get_sidebar_edge_info()
+    
+    if not edge_info then 
+      return Config.windows.height 
+    end
+    
+    local new_height_rows
+    
+    if edge_info.position == "bottom" then
+      -- For bottom sidebar: height = distance from mouse to bottom edge of screen
+      new_height_rows = math.max(3, editor_height - mouse_y)
+    elseif edge_info.position == "top" then
+      -- For top sidebar: height = distance from top edge of screen to mouse position
+      new_height_rows = math.max(3, mouse_y)
+    else
+      -- Not a horizontal sidebar, return current height
+      return Config.windows.height
+    end
+    
+    -- Convert to percentage
+    local new_height_percent = (new_height_rows / editor_height) * 100
+    
+    -- Apply configured constraints
+    local min_height = Config.windows.mouse_resize.min_height
+    local max_height = Config.windows.mouse_resize.max_height
+    
+    new_height_percent = math.max(min_height, new_height_percent)
+    new_height_percent = math.min(max_height, new_height_percent)
+    
+    return new_height_percent
+  end
+
+  local function start_drag(mouse_x, mouse_y)
+    self.mouse_resize_state.is_dragging = true
+    self.mouse_resize_state.start_x = mouse_x or 0
+    self.mouse_resize_state.start_y = mouse_y or 0
+    self.mouse_resize_state.start_width = Config.windows.width
+    self.mouse_resize_state.start_height = Config.windows.height
+    self.mouse_resize_state.original_config_width = Config.windows.width
+    self.mouse_resize_state.original_config_height = Config.windows.height
+    
+    -- Store the initial edge info for consistent calculations
+    self.mouse_resize_state.initial_edge_info = get_sidebar_edge_info()
+    
+    -- Change cursor to resize cursor
+    local edge_info = self.mouse_resize_state.initial_edge_info
+    if edge_info and (edge_info.position == "bottom" or edge_info.position == "top") then
+      -- Vertical resize cursor for horizontal sidebars
+      vim.opt.guicursor:append("a:ver25")
+    else
+      -- Horizontal resize cursor for vertical sidebars
+      vim.opt.guicursor:append("a:hor20")
+    end
+  end
+
+  local function update_drag(mouse_x, mouse_y)
+    if not self.mouse_resize_state.is_dragging then return end
+    
+    local edge_info = self.mouse_resize_state.initial_edge_info
+    if not edge_info then return end
+    
+    local updated = false
+    
+    -- Handle vertical sidebars (left/right) - resize width
+    if edge_info.position == "left" or edge_info.position == "right" then
+      local new_width = calculate_new_width(mouse_x or 0)
+      
+      -- Update for any meaningful change (very responsive)
+      if math.abs(new_width - Config.windows.width) > 0.01 then
+        Config.windows.width = new_width
+        
+        -- Apply to all containers with proper error handling
+        for _, container in pairs(self.containers) do
+          if container and container.winid and api.nvim_win_is_valid(container.winid) then
+            local new_width_cols = Config.get_window_width()
+            pcall(api.nvim_win_set_width, container.winid, new_width_cols)
+          end
+        end
+        
+        updated = true
+      end
+    end
+    
+    -- Handle horizontal sidebars (top/bottom) - resize height
+    if edge_info.position == "bottom" or edge_info.position == "top" then
+      local new_height = calculate_new_height(mouse_y or 0)
+      
+      -- Update for any meaningful change (very responsive)
+      if math.abs(new_height - Config.windows.height) > 0.01 then
+        Config.windows.height = new_height
+        
+        -- Apply to all containers with proper error handling
+        for _, container in pairs(self.containers) do
+          if container and container.winid and api.nvim_win_is_valid(container.winid) then
+            local new_height_rows = Config.get_window_height()
+            pcall(api.nvim_win_set_height, container.winid, new_height_rows)
+          end
+        end
+        
+        updated = true
+      end
+    end
+    
+    -- Throttled re-render to avoid performance issues
+    if updated and not self._resize_render_timer then
+      self._resize_render_timer = vim.defer_fn(function()
+        self._resize_render_timer = nil
+        if self.containers.result and api.nvim_win_is_valid(self.containers.result.winid) then
+          pcall(self.render_result, self)
+          pcall(self.render_input, self)
+          pcall(self.render_selected_code, self)
+        end
+      end, 16) -- ~60fps throttling
+    end
+  end
+
+  local function end_drag()
+    if not self.mouse_resize_state.is_dragging then return end
+    
+    self.mouse_resize_state.is_dragging = false
+    self.mouse_resize_state.initial_edge_info = nil
+    
+    -- Cancel any pending render timer
+    if self._resize_render_timer then
+      self._resize_render_timer:stop()
+      self._resize_render_timer = nil
+    end
+    
+    -- Restore normal cursor
+    vim.opt.guicursor = vim.opt.guicursor:get()
+    
+    -- Final render and refresh
+    vim.defer_fn(function()
+      if self.containers.result and api.nvim_win_is_valid(self.containers.result.winid) then
+        pcall(self.render_result, self)
+        pcall(self.render_input, self)
+        pcall(self.render_selected_code, self)
+        vim.cmd("AvanteRefresh")
+      end
+    end, 50)
+  end
+
+  -- Set up global mouse event detection using autocommands
+  -- This approach works regardless of which sidebar section is focused
+  
+  api.nvim_create_autocmd("CursorMoved", {
+    group = self.augroup,
+    callback = function()
+      local current_win = api.nvim_get_current_win()
+      if self:is_sidebar_winid(current_win) then
+        update_cursor_for_resize_zone()
+      end
+    end,
+  })
+  
+  -- Global mouse keymaps that work regardless of current buffer/window
+  -- Use autocmd-based approach for more reliable mouse event capturing
+  api.nvim_create_autocmd("User", {
+    pattern = "AvanteMouseCapture",
+    group = self.augroup,
+    callback = function(ev)
+      if not ev.data then return end
+      
+      local event_type = ev.data.event
+      local mouse_pos = vim.fn.getmousepos()
+      
+      if event_type == "LeftMouse" then
+        -- Check if we're clicking on a sidebar window
+        if mouse_pos and mouse_pos.winid and self:is_sidebar_winid(mouse_pos.winid) then
+          local edge_info = get_sidebar_edge_info()
+          if edge_info and is_in_resize_zone(mouse_pos, edge_info) then
+            start_drag(mouse_pos.wincol, mouse_pos.winrow)
+            return true -- Signal that we handled the event
+          end
+        end
+      elseif event_type == "LeftDrag" then
+        if self.mouse_resize_state.is_dragging then
+          if mouse_pos and (mouse_pos.wincol or mouse_pos.winrow) then
+            update_drag(mouse_pos.wincol, mouse_pos.winrow)
+          end
+          return true -- Signal that we handled the event
+        end
+      elseif event_type == "LeftRelease" then
+        if self.mouse_resize_state.is_dragging then
+          end_drag()
+          return true -- Signal that we handled the event
+        end
+      end
+      
+      return false -- Signal that we didn't handle the event
+    end,
+  })
+  
+  -- Set global keymaps with higher priority using autocmd triggers
+  local keymap_opts = { desc = "Avante sidebar mouse resize", silent = true, noremap = true }
+  
+  vim.keymap.set({"n", "v", "i"}, "<LeftMouse>", function()
+    local handled = false
+    vim.api.nvim_exec_autocmds("User", {
+      pattern = "AvanteMouseCapture",
+      data = { event = "LeftMouse" },
+      modeline = false,
+    })
+    
+    -- Always execute normal behavior since autocmd handles the resize logic
+    local keys = api.nvim_replace_termcodes("<LeftMouse>", true, false, true)
+    api.nvim_feedkeys(keys, "n", false)
+  end, keymap_opts)
+  
+  vim.keymap.set({"n", "v", "i"}, "<LeftDrag>", function()
+    vim.api.nvim_exec_autocmds("User", {
+      pattern = "AvanteMouseCapture", 
+      data = { event = "LeftDrag" },
+      modeline = false,
+    })
+    
+    -- Only execute normal behavior if we're not dragging
+    if not self.mouse_resize_state.is_dragging then
+      local keys = api.nvim_replace_termcodes("<LeftDrag>", true, false, true)
+      api.nvim_feedkeys(keys, "n", false)
+    end
+  end, keymap_opts)
+  
+  vim.keymap.set({"n", "v", "i"}, "<LeftRelease>", function()
+    vim.api.nvim_exec_autocmds("User", {
+      pattern = "AvanteMouseCapture",
+      data = { event = "LeftRelease" },
+      modeline = false,
+    })
+    
+    -- Only execute normal behavior if we're not dragging
+    if not self.mouse_resize_state.is_dragging then
+      local keys = api.nvim_replace_termcodes("<LeftRelease>", true, false, true)
+      api.nvim_feedkeys(keys, "n", false)
+    end
+  end, keymap_opts)
+  
+  -- Store global keymaps for cleanup
+  self._global_mouse_keymaps = {
+    { mode = {"n", "v", "i"}, lhs = "<LeftMouse>" },
+    { mode = {"n", "v", "i"}, lhs = "<LeftDrag>" },
+    { mode = {"n", "v", "i"}, lhs = "<LeftRelease>" },
+  }
+  
+  -- Note: Global keymaps above handle all mouse events reliably
+  -- No need for buffer-local keymaps since global ones work for all cases
+end
+
+
+
+---Update width and apply to all containers (for external use)
+---@param width_percent number The new width as a percentage
+function Sidebar:set_width(width_percent)
+  -- Clamp to min/max
+  width_percent = math.max(Config.windows.mouse_resize.min_width, width_percent)
+  width_percent = math.min(Config.windows.mouse_resize.max_width, width_percent)
+  
+  -- Update config
+  Config.windows.width = width_percent
+  
+  -- Apply to all containers
+  for _, container in pairs(self.containers) do
+    if container.winid and api.nvim_win_is_valid(container.winid) then
+      local new_width_cols = Config.get_window_width()
+      api.nvim_win_set_width(container.winid, new_width_cols)
+    end
+  end
+  
+  -- Re-render headers
+  self:render_result()
+  self:render_input()
+  self:render_selected_code()
+  
+  vim.defer_fn(function() vim.cmd("AvanteRefresh") end, 100)
+end
+
 --- Initialize the sidebar instance.
 --- @return avante.Sidebar The Sidebar instance.
 function Sidebar:initialize()
@@ -1650,25 +2092,6 @@ local function render_chat_record_prefix(timestamp, provider, model, request, se
   end
 
   return res .. "\n\n> " .. request:gsub("\n", "\n> "):gsub("([%w-_]+)%b[]", "`%0`")
-end
-
-local function calculate_config_window_position()
-  local position = Config.windows.position
-  if position == "smart" then
-    -- get editor width
-    local editor_width = vim.o.columns
-    -- get editor height
-    local editor_height = vim.o.lines * 3
-
-    if editor_width > editor_height then
-      position = "right"
-    else
-      position = "bottom"
-    end
-  end
-
-  ---@cast position -"smart", -string
-  return position
 end
 
 function Sidebar:get_layout()
@@ -2795,6 +3218,8 @@ function Sidebar:create_input_container()
       if ev.data and ev.data.request then handle_submit(ev.data.request) end
     end,
   })
+  
+  -- Mouse events are handled by global keymaps, no buffer-specific setup needed
 end
 
 -- FIXME: this is used by external plugin users

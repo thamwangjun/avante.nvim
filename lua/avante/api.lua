@@ -298,6 +298,45 @@ end
 
 function M.stop() require("avante.llm").cancel_inflight_request() end
 
+
+
+---@param width? number optional width percentage (15-70), if not provided, prompts user
+function M.resize_sidebar(width)
+  local sidebar = require("avante").get()
+  if not sidebar then
+    Utils.warn("Sidebar is not open", { title = "Avante" })
+    return
+  end
+
+  if not Config.windows.mouse_resize.enabled then
+    Utils.warn("Mouse resize is disabled in config. Set `windows.mouse_resize.enabled = true`", { title = "Avante" })
+    return
+  end
+
+  if width then
+    sidebar:set_width(width)
+    Utils.info(string.format("Sidebar width set to %d%%", width), { title = "Avante" })
+  else
+    -- Prompt user for width
+    vim.ui.input({
+      prompt = string.format("Enter sidebar width (%d-%d%%): ", 
+        Config.windows.mouse_resize.min_width, 
+        Config.windows.mouse_resize.max_width),
+      default = tostring(Config.windows.width),
+    }, function(input)
+      if input then
+        local new_width = tonumber(input)
+        if new_width then
+          sidebar:set_width(new_width)
+          Utils.info(string.format("Sidebar width set to %d%%", new_width), { title = "Avante" })
+        else
+          Utils.warn("Invalid width value", { title = "Avante" })
+        end
+      end
+    end)
+  end
+end
+
 return setmetatable(M, {
   __index = function(t, k)
     local module = require("avante")
