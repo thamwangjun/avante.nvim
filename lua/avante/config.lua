@@ -459,8 +459,7 @@ M._defaults = {
   },
   prompt_logger = { -- logs prompts to disk (timestamped, for replay/debugging)
     enabled = true, -- toggle logging entirely
-    log_dir = Utils.join_paths(vim.fn.stdpath("cache"), "avante_prompts"), -- directory where logs are saved
-    fortune_cookie_on_success = false, -- shows a random fortune after each logged prompt (requires `fortune` installed)
+    log_dir = vim.fn.stdpath("cache"), -- directory where logs are saved
     next_prompt = {
       normal = "<C-n>", -- load the next (newer) prompt log in normal mode
       insert = "<C-n>",
@@ -627,7 +626,7 @@ M._defaults = {
     },
     input = {
       prefix = "> ",
-      height = 6, -- Height of the input window in vertical layout
+      height = 8, -- Height of the input window in vertical layout
     },
     edit = {
       border = { " ", " ", " ", " ", " ", " ", " ", " " },
@@ -872,13 +871,19 @@ function M.setup(opts)
 
   local last_model, last_provider = M.load_last_model()
   if last_model then
+    local original_provider = merged.provider
+    local original_model = merged.providers
+      and merged.providers[original_provider]
+      and merged.providers[original_provider].model
     if last_provider then merged.provider = last_provider end
     if merged.providers and merged.provider and merged.providers[merged.provider] then
       merged.providers[merged.provider].model = last_model
-      Utils.info(
-        "Using last model: " .. merged.provider .. "/" .. merged.providers[merged.provider].model,
-        { title = "Avante" }
-      )
+      if last_model ~= original_model or last_provider ~= original_provider then
+        Utils.info(
+          "Using last model: " .. merged.provider .. "/" .. merged.providers[merged.provider].model,
+          { title = "Avante" }
+        )
+      end
     end
   end
 
