@@ -117,7 +117,6 @@ parso==0.8.4
 pathspec==0.12.1
 pexpect==4.9.0
 pillow==11.1.0
-posthog==3.11.0
 prompt-toolkit==3.0.50
 propcache==0.2.1
 protobuf==5.29.3
