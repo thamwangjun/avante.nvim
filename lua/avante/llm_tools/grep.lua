@@ -77,10 +77,10 @@ function M.func(input, opts)
   if not Path:new(abs_path):exists() then return "", "No such file or directory: " .. abs_path end
 
   ---check if any search cmd is available
-  local search_cmd = vim.fn.exepath("rg")
+  local search_cmd = vim.fn.exepath("grep")
   if search_cmd == "" then search_cmd = vim.fn.exepath("ag") end
   if search_cmd == "" then search_cmd = vim.fn.exepath("ack") end
-  if search_cmd == "" then search_cmd = vim.fn.exepath("grep") end
+  if search_cmd == "" then search_cmd = vim.fn.exepath("rg") end
   if search_cmd == "" then return "", "No search command found" end
 
   ---execute the search command
