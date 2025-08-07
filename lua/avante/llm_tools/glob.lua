@@ -6,7 +6,11 @@ local M = setmetatable({}, Base)
 
 M.name = "glob"
 
-M.description = 'Fast file pattern matching using glob patterns like "**/*.js", in current project scope'
+M.description = [[Search for files in the workspace by glob pattern. This only returns the paths of matching files. Use this tool when you know the exact filename pattern of the files you're searching for. Glob patterns match from the root of the workspace folder. Examples:
+- **/*.{js,ts} to match all js/ts files in the workspace.
+- src/** to match all files under the top-level src folder.
+- **/foo/**/*.js to match all js files under any foo folder in the workspace.
+]]
 
 ---@type AvanteLLMToolParam
 M.param = {
@@ -14,7 +18,7 @@ M.param = {
   fields = {
     {
       name = "pattern",
-      description = "Glob pattern",
+      description = "Glob pattern to search for",
       type = "string",
     },
     {
@@ -22,10 +26,16 @@ M.param = {
       description = "Relative path to the project directory, as cwd",
       type = "string",
     },
+    {
+      name = "explanation",
+      description = "One sentence explanation as to why this tool is being used, and how it contributes to the goal.",
+      type = "string",
+    },
   },
   usage = {
-    pattern = "Glob pattern",
+    pattern = "Glob pattern to search for",
     path = "Relative path to the project directory, as cwd",
+    explanation = "One sentence explanation as to why this tool is being used, and how it contributes to the goal.",
   },
 }
 
