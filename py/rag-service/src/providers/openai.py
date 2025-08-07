@@ -4,7 +4,7 @@ from typing import Any
 
 from llama_index.core.base.embeddings.base import BaseEmbedding
 from llama_index.core.llms.llm import LLM
-from llama_index.embeddings.openai import OpenAIEmbedding
+from llama_index.embeddings.openai_like import OpenAILikeEmbedding
 from llama_index.llms.openai import OpenAI
 
 
@@ -30,8 +30,8 @@ def initialize_embed_model(
     # Use the provided endpoint directly.
     # Note: OpenAIEmbedding automatically picks up OPENAI_API_KEY env var
     # We are not using embed_api_key parameter here, relying on env var as original code did.
-    return OpenAIEmbedding(
-        model=embed_model,
+    return OpenAILikeEmbedding(
+        model_name=embed_model,
         api_base=embed_endpoint,
         api_key=embed_api_key,
         **embed_extra,
