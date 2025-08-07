@@ -6,9 +6,28 @@ local Base = require("avante.llm_tools.base")
 ---@class AvanteLLMTool
 local M = setmetatable({}, Base)
 
-M.name = "grep"
+M.name = "grep_search"
 
-M.description = "Search for a keyword in a directory using grep in current project scope"
+M.description = [[### Instructions:
+This is best for finding exact text matches or regex patterns.
+This is preferred over semantic search when we know the exact symbol/function name/etc. to search in some set of directories/file types.
+Use this tool to run fast, exact regex searches over text files using the `ripgrep` engine.
+To avoid overwhelming output, the results are capped at 50 matches.
+Use the include or exclude patterns to filter the search scope by file type or specific paths.
+- Always escape special regex characters: ( ) [ ] { } + * ? ^ $ | . \
+- Use `\` to escape any of these characters when they appear in your search string.
+- Do NOT perform fuzzy or semantic matches.
+- Return only a valid regex pattern string.
+### Examples:
+| Literal               | Regex Pattern            |
+|-----------------------|--------------------------|
+| function(             | function\(               |
+| value[index]          | value\[index\]           |
+| file.txt              | file\.txt                |
+| user|admin            | user\|admin              |
+| path\to\file          | path\\to\\file           |
+| hello world           | hello world              |
+| foo\(bar\)            | foo\\(bar\\)             |]]
 
 ---@type AvanteLLMToolParam
 M.param = {
@@ -16,40 +35,46 @@ M.param = {
   fields = {
     {
       name = "path",
-      description = "Relative path to the project directory",
+      description = "Relative path to the project directory for the search",
       type = "string",
     },
     {
       name = "query",
-      description = "Query to search for",
+      description = "The regex pattern to search for",
       type = "string",
     },
     {
       name = "case_sensitive",
-      description = "Whether to search case sensitively",
+      description = "Whether the search should be case sensitive",
       type = "boolean",
       default = false,
       optional = true,
     },
     {
       name = "include_pattern",
-      description = "Glob pattern to include files",
+      description = "Glob pattern for files to include (e.g. '*.ts' for TypeScript files)",
       type = "string",
       optional = true,
     },
     {
       name = "exclude_pattern",
-      description = "Glob pattern to exclude files",
+      description = "Glob pattern for files to exclude (e.g. '*.ts' for TypeScript files)",
       type = "string",
       optional = true,
     },
+    {
+      name = "explanation",
+      description = "One sentence explanation as to why this tool is being used, and how it contributes to the goal.",
+      type = "string",
+    },
   },
   usage = {
-    path = "Relative path to the project directory",
-    query = "Query to search for",
-    case_sensitive = "Whether to search case sensitively",
-    include_pattern = "Glob pattern to include files",
-    exclude_pattern = "Glob pattern to exclude files",
+    path = "Relative path to the project directory for the search",
+    query = "The regex pattern to search for",
+    case_sensitive = "Whether the search should be case sensitive",
+    include_pattern = "Glob pattern for files to include (e.g. '*.ts' for TypeScript files)",
+    exclude_pattern = "Glob pattern for files to exclude (e.g. '*.ts' for TypeScript files)",
+    explanation = "One sentence explanation as to why this tool is being used, and how it contributes to the goal.",
   },
 }
 
