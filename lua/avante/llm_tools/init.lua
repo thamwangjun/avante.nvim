@@ -659,6 +659,7 @@ M._tools = {
       },
       usage = {
         query = "The search query to find relevant code. You should reuse the user's exact query/most recent message with their wording unless there is a clear reason not to.",
+        explanation = "One sentence explanation as to why this tool is being used, and how it contributes to the goal.",
       },
     },
     returns = {
