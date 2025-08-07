@@ -171,7 +171,7 @@ app = FastAPI(
 # Constants
 SIMILARITY_THRESHOLD = 0.95
 MAX_SAMPLE_SIZE = 100
-BATCH_PROCESSING_DELAY = 1
+BATCH_PROCESSING_DELAY = 0.25  # Reduced delay between batch processing
 
 # number of cpu cores to use for parallel processing
 MAX_WORKERS = multiprocessing.cpu_count()
