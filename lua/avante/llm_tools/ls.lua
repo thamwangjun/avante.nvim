@@ -7,26 +7,32 @@ local M = setmetatable({}, Base)
 
 M.name = "ls"
 
-M.description = "List files and directories in a given path in current project scope"
+M.description = "List the contents of a directory. The quick tool to use for discovery, before using more targeted tools like semantic search or file reading. Useful to try to understand the file structure before diving deeper into specific files. Can be used to explore the codebase."
 
 ---@type AvanteLLMToolParam
 M.param = {
   type = "table",
   fields = {
     {
+      name = "explanation",
+      description = "One sentence explanation as to why this tool is being used, and how it contributes to the goal.",
+      type = "string",
+    },
+    {
       name = "path",
-      description = "Relative path to the project directory",
+      description = "Path to list contents of, relative to the workspace root.",
       type = "string",
     },
     {
       name = "max_depth",
-      description = "Maximum depth of the directory",
+      description = "Maximum depth of the directory to list contents of.",
       type = "integer",
     },
   },
   usage = {
-    path = "Relative path to the project directory",
-    max_depth = "Maximum depth of the directory",
+    explanation = "One sentence explanation as to why this tool is being used, and how it contributes to the goal.",
+    path = "Path to list contents of, relative to the workspace root.",
+    max_depth = "Maximum depth of the directory to list contents of.",
   },
 }
 
@@ -34,7 +40,7 @@ M.param = {
 M.returns = {
   {
     name = "entries",
-    description = "List of file paths and directorie paths in the given directory",
+    description = "List of file paths and directory paths in the given directory",
     type = "string[]",
   },
   {
