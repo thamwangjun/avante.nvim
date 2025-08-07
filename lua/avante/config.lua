@@ -570,6 +570,15 @@ M._defaults = {
     wrap = true, -- similar to vim.o.wrap
     width = 30, -- default % based on available width in vertical layout
     height = 30, -- default % based on available height in horizontal layout
+    -- Mouse resize configuration
+    mouse_resize = {
+      enabled = true, -- Enable mouse drag to resize sidebar
+      min_width = 15, -- Minimum width percentage
+      max_width = 70, -- Maximum width percentage
+      min_height = 10, -- Minimum height percentage (for horizontal sidebars)
+      max_height = 80, -- Maximum height percentage (for horizontal sidebars)
+      resize_zone_width = 3, -- Width of the resize zone in columns (edge detection area)
+    },
     sidebar_header = {
       enabled = true, -- true, false to enable/disable the header
       align = "center", -- left, center, right for title
@@ -954,6 +963,8 @@ M = setmetatable(M, {
 function M.support_paste_image() return Utils.has("img-clip.nvim") or Utils.has("img-clip") end
 
 function M.get_window_width() return math.ceil(vim.o.columns * (M.windows.width / 100)) end
+
+function M.get_window_height() return math.ceil(vim.o.lines * (M.windows.height / 100)) end
 
 ---get supported providers
 ---@param provider_name avante.ProviderName
