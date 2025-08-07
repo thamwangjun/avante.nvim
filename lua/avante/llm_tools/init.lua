@@ -512,7 +512,7 @@ function M.git_commit(input, opts)
 end
 
 ---@type AvanteLLMToolFunc<{ query: string }>
-function M.rag_search(input, opts)
+function M.codebase_search(input, opts)
   local on_log = opts.on_log
   local on_complete = opts.on_complete
   if not on_complete then return nil, "on_complete not provided" end
@@ -640,20 +640,25 @@ M._tools = {
   require("avante.llm_tools.dispatch_agent"),
   require("avante.llm_tools.glob"),
   {
-    name = "rag_search",
+    name = "codebase_search",
     enabled = function() return Config.rag_service.enabled and RagService.is_ready() end,
-    description = "Use Retrieval-Augmented Generation (RAG) to search for relevant information from an external knowledge base or documents. This tool retrieves relevant context from a large dataset and integrates it into the response generation process, improving accuracy and relevance. Use it when answering questions that require factual knowledge beyond what the model has been trained on.",
+    description = "Find snippets of code from the codebase most relevant to the search query. This is a semantic search tool, so the query should ask for something semantically matching what is needed. Unless there is a clear reason to use your own search query, please just reuse the user's exact query with their wording. Their exact wording/phrasing can often be helpful for the semantic search query. Keeping the same exact question format can also be helpful.",
     param = {
       type = "table",
       fields = {
         {
+          name = "explanation",
+          description = "One sentence explanation as to why this tool is being used, and how it contributes to the goal.",
+          type = "string"
+        },
+        {
           name = "query",
-          description = "Query to search",
+          description = "The search query to find relevant code. You should reuse the user's exact query/most recent message with their wording unless there is a clear reason not to.",
           type = "string",
         },
       },
       usage = {
-        query = "Query to search",
+        query = "The search query to find relevant code. You should reuse the user's exact query/most recent message with their wording unless there is a clear reason not to.",
       },
     },
     returns = {
