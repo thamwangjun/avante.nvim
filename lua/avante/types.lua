@@ -84,7 +84,7 @@ vim.g.avante_login = vim.g.avante_login
 ---@alias AvanteLLMMessageContent AvanteLLMMessageContentItem[] | string
 
 ---@class AvanteLLMMessage
----@field role "user" | "assistant"
+---@field role "user" | "assistant" | "system"
 ---@field content AvanteLLMMessageContent
 
 ---@class avante.TODO

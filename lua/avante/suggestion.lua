@@ -176,30 +176,26 @@ function Suggestion:suggest()
   ---@type AvanteLLMMessage[]
   local llm_messages = {
     {
+      role = "system",
+      content = [[# Instructions
+
+Provide the most likely code autocompletion suggestions based on given context inside <filepath></filepath> and <code></code> tags.
+Only respond in <suggestions></suggestions> tags.]],
+    },
+    {
       role = "user",
-      content = [[
-<filepath>a.py</filepath>
+      content = [[<filepath>a.py</filepath>
 <code>
 L1: def fib
 L2:
 L3: if __name__ == "__main__":
 L4:     # just pass
-L5:     pass
-</code>
-      ]],
+L5:     pas
+</code>]],
     },
     {
       role = "assistant",
-      content = "ok",
-    },
-    {
-      role = "user",
-      content = '{"insertSpaces":true,"tabSize":4,"indentSize":4,"position":{"row":1,"col":7}}',
-    },
-    {
-      role = "assistant",
-      content = [[
-<suggestions>
+      content = [[<suggestions>
 [
   [
     {
@@ -226,8 +222,7 @@ L5:     pass
     },
   ]
 ]
-</suggestions>
-          ]],
+</suggestions>]],
     },
   }
 
