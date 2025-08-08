@@ -5,9 +5,9 @@ local Utils = require("avante.utils")
 ---@class AvanteLLMTool
 local M = setmetatable({}, Base)
 
-M.name = "get_diagnostics"
+M.name = "analyze_file_issues"
 
-M.description = "Get diagnostics from a specific file"
+M.description = "Retrieves linter errors, warnings, and diagnostic information from a specific file to help identify and resolve code issues"
 
 ---@type AvanteLLMToolParam
 M.param = {
@@ -15,12 +15,12 @@ M.param = {
   fields = {
     {
       name = "path",
-      description = "The path to the file in the current project scope",
+      description = "The relative or absolute path to the file within the current project scope",
       type = "string",
     },
   },
   usage = {
-    path = "The path to the file in the current project scope",
+    path = "Path to the target file (e.g., 'src/main.lua' or '/absolute/path/to/file.lua')",
   },
 }
 
@@ -28,12 +28,12 @@ M.param = {
 M.returns = {
   {
     name = "diagnostics",
-    description = "The diagnostics for the file",
+    description = "JSON-encoded array of diagnostic objects containing message, line numbers, severity, and source information",
     type = "string",
   },
   {
     name = "error",
-    description = "Error message if the replacement failed",
+    description = "Error message if diagnostic retrieval fails due to file access issues or invalid path",
     type = "string",
     optional = true,
   },
