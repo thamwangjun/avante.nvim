@@ -714,29 +714,29 @@ M._tools = {
   },
   {
     name = "git_diff",
-    description = "Get git diff for generating commit message in current project scope",
+    description = "Retrieve git diff output for the current project to analyze code changes and generate meaningful commit messages. This tool examines staged and unstaged changes within the specified scope of the repository.",
     param = {
       type = "table",
       fields = {
         {
           name = "scope",
-          description = "Scope for the git diff (e.g. specific files or directories)",
+          description = "Optional scope to limit the git diff output. Can be specific file paths, directory paths, or git diff options (e.g., 'src/', 'package.json', '--staged', '--cached'). If not provided, returns diff for all changes in the current working directory.",
           type = "string",
         },
       },
       usage = {
-        scope = "Scope for the git diff (e.g. specific files or directories)",
+        scope = "Optional scope to limit the git diff output. Can be specific file paths, directory paths, or git diff options (e.g., 'src/', 'package.json', '--staged', '--cached'). If not provided, returns diff for all changes in the current working directory.",
       },
     },
     returns = {
       {
         name = "result",
-        description = "Git diff output to be used for generating commit message",
+        description = "The git diff output showing file changes, additions, deletions, and modifications. Formatted as standard unified diff format with file paths, line numbers, and change indicators.",
         type = "string",
       },
       {
         name = "error",
-        description = "Error message if the diff generation failed",
+        description = "Error message if the git diff operation failed (e.g., not in a git repository, invalid scope specified, or git command execution error).",
         type = "string",
         optional = true,
       },
@@ -744,36 +744,36 @@ M._tools = {
   },
   {
     name = "git_commit",
-    description = "Commit changes with the given commit message in current project scope",
+    description = "Commits staged changes to the current Git repository with a descriptive commit message. This tool handles the git commit operation and provides feedback on success or failure. Use this after staging files with git add or when files are already staged and ready to be committed.",
     param = {
       type = "table",
       fields = {
         {
           name = "message",
-          description = "Commit message to use",
+          description = "The commit message describing the changes being committed. Should follow conventional commit format when possible (e.g., 'feat: add user authentication', 'fix: resolve login bug', 'docs: update README').",
           type = "string",
         },
         {
           name = "scope",
-          description = "Scope for staging files (e.g. specific files or directories)",
+          description = "Optional scope to stage specific files or directories before committing. If not provided, commits currently staged files. Can be a file path, directory path, or glob pattern (e.g., 'src/', '*.js', 'package.json').",
           type = "string",
           optional = true,
         },
       },
       usage = {
-        message = "Commit message to use",
-        scope = "Scope for staging files (e.g. specific files or directories)",
+        message = "The commit message describing the changes being committed. Should follow conventional commit format when possible (e.g., 'feat: add user authentication', 'fix: resolve login bug', 'docs: update README').",
+        scope = "Optional scope to stage specific files or directories before committing. If not provided, commits currently staged files. Can be a file path, directory path, or glob pattern (e.g., 'src/', '*.js', 'package.json').",
       },
     },
     returns = {
       {
         name = "success",
-        description = "True if the commit was successful, false otherwise",
+        description = "True if the commit was successful, false if it failed due to errors such as no staged changes, merge conflicts, or repository issues.",
         type = "boolean",
       },
       {
         name = "error",
-        description = "Error message if the commit failed",
+        description = "Detailed error message if the commit operation failed, including specific Git error details.",
         type = "string",
         optional = true,
       },
