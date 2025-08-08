@@ -786,11 +786,29 @@ M._tools = {
   require("avante.llm_tools.update_todo_status"),
   {
     name = "read_file_toplevel_symbols",
-    description = [[Read the top-level symbols of a file in current project scope.
+    description = [[Extract and list all top-level symbol definitions from a specified file within the current project scope.
 
-This tool is useful for understanding the structure of a file and extracting information about its contents. It can be used to extract information about functions, types, constants, and other symbols that are defined at the top level of a file.
+This tool provides a high-level overview of a file's structure by identifying all symbols defined at the top level, including variables, functions, classes, constants, imports, and other declarations. It serves as an efficient way to understand a file's API surface and major components without reading the entire file content.
 
+**Primary Use Cases:**
+- Quick file structure assessment and code navigation
+- Identifying available functions, classes, and variables before detailed code analysis  
+- Understanding module interfaces and exported symbols
+- Planning refactoring or code organization tasks
+- Exploring unfamiliar codebases systematically
 
+**Symbol Detection Coverage:**
+- Function and method definitions (`def`, `function`, etc.)
+- Class and type definitions (`class`, `interface`, `struct`, etc.)  
+- Variable and constant declarations
+- Import/export statements and module dependencies
+- Enum definitions and configuration objects
+- Top-level decorators and annotations
+
+**Language Support:**
+Works across multiple programming languages with appropriate syntax parsing for each language's symbol definition patterns.
+
+**Example Usage Scenario:**
 <example>
 
 Given the following file:
@@ -824,23 +842,23 @@ Then you can use the "read_definitions" tool to retrieve the source code definit
       fields = {
         {
           name = "path",
-          description = "Relative path to the file in current project scope",
+          description = "Relative file path within the current project scope. Must be a valid file path using forward slashes (/) as separators, even on Windows systems. Examples: 'src/main.py', 'utils/helpers.js', 'lib/authentication.rb'",
           type = "string",
         },
       },
       usage = {
-        path = "Relative path to the file in current project scope",
+        path = "Relative file path within the current project scope. Must be a valid file path using forward slashes (/) as separators, even on Windows systems. Examples: 'src/main.py', 'utils/helpers.js', 'lib/authentication.rb'",
       },
     },
     returns = {
       {
         name = "definitions",
-        description = "Top-level symbols of the file",
+        description = "Top-level symbol names found in the file",
         type = "string",
       },
       {
         name = "error",
-        description = "Error message if the file was not read successfully",
+        description = "Detailed error message if the file could not be read or parsed successfully",
         type = "string",
         optional = true,
       },
@@ -1165,24 +1183,24 @@ You can delete the first file by providing a path of "directory1/a/something.txt
   },
   {
     name = "fetch",
-    description = "Fetch markdown from a url",
+    description = "Fetches and converts web content to markdown format. Supports HTML-to-markdown conversion, direct markdown retrieval, and basic content extraction from various web formats.",
     param = {
       type = "table",
       fields = {
         {
           name = "url",
-          description = "Url to fetch markdown from",
+          description = "Valid HTTP/HTTPS URL to fetch content from. Supports web pages, direct markdown files, and text-based content.",
           type = "string",
         },
       },
       usage = {
-        url = "Url to fetch markdown from",
+        url = "Valid HTTP/HTTPS URL to fetch content from. Supports web pages, direct markdown files, and text-based content.",
       },
     },
     returns = {
       {
         name = "result",
-        description = "Result of the fetch",
+        description = "Successfully fetched content converted to markdown format. Empty string if fetch failed.",
         type = "string",
       },
       {
@@ -1195,31 +1213,31 @@ You can delete the first file by providing a path of "directory1/a/something.txt
   },
   {
     name = "read_definitions",
-    description = "Retrieves the complete source code definitions of any symbol (function, type, constant, etc.) from your codebase.",
+    description = "Retrieves complete source code definitions for symbols (functions, classes, types, constants, variables) from the current codebase using Language Server Protocol (LSP). This tool provides comprehensive definition information including source location, full implementation, and optional line numbering for precise code navigation and understanding.",
     param = {
       type = "table",
       fields = {
         {
           name = "symbol_name",
-          description = "The name of the symbol to retrieve the definition for",
+          description = "The exact name or identifier of the symbol to retrieve definitions for. Supports functions, classes, types, constants, variables, and other language constructs. Case-sensitive and must match the symbol as declared in the source code.",
           type = "string",
         },
         {
           name = "show_line_numbers",
-          description = "Whether to show line numbers in the definitions",
+          description = "Controls whether line numbers are included in the returned definitions. When enabled, each line of code will be prefixed with its line number for precise location reference.",
           type = "boolean",
           default = false,
         },
       },
       usage = {
-        symbol_name = "The name of the symbol to retrieve the definition for, example: fibonacci",
-        show_line_numbers = "true or false",
+        symbol_name = "The exact name or identifier of the symbol to retrieve definitions for. Supports functions, classes, types, constants, variables, and other language constructs. Case-sensitive and must match the symbol as declared in the source code.",
+        show_line_numbers = "true",
       },
     },
     returns = {
       {
         name = "definitions",
-        description = "The source code definitions of the symbol",
+        description = "Array of source code definition strings. Each element contains the complete source code for one definition of the symbol. Multiple definitions may exist for overloaded functions or symbols defined in multiple files.",
         type = "string[]",
       },
       {
