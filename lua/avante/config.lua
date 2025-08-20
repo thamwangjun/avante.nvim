@@ -17,6 +17,9 @@ local Utils = require("avante.utils")
 
 ---@class avante.CoreConfig: avante.Config
 local M = {}
+
+--- Default configuration for project-specific instruction file
+M.instructions_file = "avante.md"
 ---@class avante.Config
 M._defaults = {
   debug = false,
@@ -528,7 +531,7 @@ M._defaults = {
     toggle = {
       default = "<leader>at",
       debug = "<leader>ad",
-      hint = "<leader>ah",
+      selection = "<leader>aC",
       suggestion = "<leader>as",
       repomap = "<leader>aR",
     },
@@ -633,6 +636,9 @@ M._defaults = {
       prefix = "> ",
       height = 8, -- Height of the input window in vertical layout
     },
+    selected_files = {
+      height = 6, -- Maximum height of the selected files window
+    },
     edit = {
       border = { " ", " ", " ", " ", " ", " ", " ", " " },
       start_insert = true, -- Start insert mode when opening the edit window
@@ -654,9 +660,14 @@ M._defaults = {
     --- Disable by setting to -1.
     override_timeoutlen = 500,
   },
-  --- @class AvanteHintsConfig
-  hints = {
+  --- Allows selecting code or other data in a buffer and ask LLM questions about it or
+  --- to perform edits/transformations.
+  --- @class AvanteSelectionConfig
+  --- @field enabled boolean
+  --- @field hint_display "delayed" | "immediate" | "none" When to show key map hints.
+  selection = {
     enabled = true,
+    hint_display = "delayed",
   },
   --- @class AvanteRepoMapConfig
   repo_map = {
