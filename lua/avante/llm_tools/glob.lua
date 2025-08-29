@@ -6,7 +6,17 @@ local M = setmetatable({}, Base)
 
 M.name = "glob"
 
-M.description = [[Search for files in the workspace by glob pattern. This only returns the paths of matching files. Use this tool when you know the exact filename pattern of the files you're searching for. Glob patterns match from the root of the workspace folder. Examples:
+M.description = [[### Instructions:
+Fast file pattern matching tool that works with any codebase size.
+Supports glob patterns like "**/*.js" or "src/**/*.ts".
+
+**Note on planning**: When doing an open ended search that may require multiple rounds of globbing and grepping, use planning tools (todo related tools) instead.
+
+**Batch processing capability**: This tool has the capability to be called multiple times in a single response. It is always better to speculatively perform multiple searches as a batch that are potentially useful.
+
+Search for files in the workspace by glob pattern. This only returns the paths of matching files. Use this tool when you know the exact filename pattern of the files you're searching for. Glob patterns match from the root of the workspace folder. 
+
+### Examples:
 - **/*.{js,ts} to match all js/ts files in the workspace.
 - src/** to match all files under the top-level src folder.
 - **/foo/**/*.js to match all js files under any foo folder in the workspace.
