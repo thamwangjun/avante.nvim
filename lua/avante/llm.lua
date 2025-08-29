@@ -492,16 +492,18 @@ function M.generate_prompts(opts)
     if msg.is_user_submission then
       message = vim.deepcopy(message)
       local content = message.content
-      if type(content) == "string" then
-        message.content = "<task>" .. content .. "</task>"
-      elseif type(content) == "table" then
-        for idx, item in ipairs(content) do
-          if type(item) == "string" then
-            item = "<task>" .. item .. "</task>"
-            content[idx] = item
-          elseif type(item) == "table" and item.type == "text" then
-            item.content = "<task>" .. item.content .. "</task>"
-            content[idx] = item
+      if Config.mode == "agentic" then
+        if type(content) == "string" then
+          message.content = "<task>" .. content .. "</task>"
+        elseif type(content) == "table" then
+          for idx, item in ipairs(content) do
+            if type(item) == "string" then
+              item = "<task>" .. item .. "</task>"
+              content[idx] = item
+            elseif type(item) == "table" and item.type == "text" then
+              item.content = "<task>" .. item.content .. "</task>"
+              content[idx] = item
+            end
           end
         end
       end
@@ -550,6 +552,10 @@ function M.generate_prompts(opts)
   if opts.tools then tools = vim.list_extend(tools, opts.tools) end
   if opts.prompt_opts and opts.prompt_opts.tools then tools = vim.list_extend(tools, opts.prompt_opts.tools) end
 
+  -- Set tools to nil if empty to avoid sending empty arrays to APIs that require
+  -- tools to be either non-existent or have at least one item
+  if #tools == 0 then tools = nil end
+
   local agents_rules = Prompts.get_agents_rules_prompt()
   if agents_rules then system_prompt = system_prompt .. "\n\n" .. agents_rules end
   local cursor_rules = Prompts.get_cursor_rules_prompt(selected_files)
@@ -584,6 +590,18 @@ local parse_headers = function(headers_file)
       line = line:gsub("\r$", "")
       local key, value = line:match("^%s*(.-)%s*:%s*(.*)$")
       if key and value then headers[key] = value end
+    end
+    if Config.debug then
+      -- Original header file was deleted by plenary.nvim
+      -- see https://github.com/nvim-lua/plenary.nvim/blob/b9fd5226c2f76c951fc8ed5923d85e4de065e509/lua/plenary/curl.lua#L268
+      local debug_headers_file = headers_file .. ".log"
+      Utils.debug("curl response headers file:", debug_headers_file)
+      local debug_file = io.open(debug_headers_file, "a")
+      if debug_file then
+        file:seek("set")
+        debug_file:write(file:read("*all"))
+        debug_file:close()
+      end
     end
     file:close()
   end
@@ -653,140 +671,162 @@ function M.curl(opts)
   local curl_body_file = temp_file .. "-request-body.json"
   local resp_body_file = temp_file .. "-response-body.txt"
   local headers_file = temp_file .. "-response-headers.txt"
-  local json_content = vim.json.encode(spec.body)
-  fn.writefile(vim.split(json_content, "\n"), curl_body_file)
+
+  -- Check if this is a multipart form request (specifically for watsonx)
+  local is_multipart_form = spec.headers and spec.headers["Content-Type"] == "multipart/form-data"
+  local curl_options
+
+  if is_multipart_form then
+    -- For multipart form data, use the form parameter
+    -- spec.body should be a table with form field data
+    curl_options = {
+      headers = spec.headers,
+      proxy = spec.proxy,
+      insecure = spec.insecure,
+      form = spec.body,
+      raw = spec.rawArgs,
+    }
+  else
+    -- For regular JSON requests, encode as JSON and write to file
+    local json_content = vim.json.encode(spec.body)
+    fn.writefile(vim.split(json_content, "\n"), curl_body_file)
+    curl_options = {
+      headers = spec.headers,
+      proxy = spec.proxy,
+      insecure = spec.insecure,
+      body = curl_body_file,
+      raw = spec.rawArgs,
+    }
+  end
 
   Utils.debug("curl request body file:", curl_body_file)
   Utils.debug("curl response body file:", resp_body_file)
-  Utils.debug("curl headers file:", headers_file)
 
   local function cleanup()
     if Config.debug then return end
     vim.schedule(function()
       fn.delete(curl_body_file)
       pcall(fn.delete, resp_body_file)
-      fn.delete(headers_file)
     end)
   end
 
   local headers_reported = false
 
-  local started_job, new_active_job = pcall(curl.post, spec.url, {
-    headers = spec.headers,
-    proxy = spec.proxy,
-    insecure = spec.insecure,
-    body = curl_body_file,
-    raw = spec.rawArgs,
-    dump = { "-D", headers_file },
-    stream = function(err, data, _)
-      if not headers_reported and opts.on_response_headers then
-        headers_reported = true
-        opts.on_response_headers(parse_headers(headers_file))
-      end
-      if err then
-        completed = true
-        handler_opts.on_stop({ reason = "error", error = err })
-        return
-      end
-      if not data then return end
-      if Config.debug then
-        if type(data) == "string" then
-          local file = io.open(resp_body_file, "a")
-          if file then
-            file:write(data .. "\n")
-            file:close()
-          end
+  local started_job, new_active_job = pcall(
+    curl.post,
+    spec.url,
+    vim.tbl_extend("force", curl_options, {
+      dump = { "-D", headers_file },
+      stream = function(err, data, _)
+        if not headers_reported and opts.on_response_headers then
+          headers_reported = true
+          opts.on_response_headers(parse_headers(headers_file))
         end
-      end
-      vim.schedule(function()
-        if provider.parse_stream_data ~= nil then
-          provider:parse_stream_data(turn_ctx, data, handler_opts)
-        else
-          parse_stream_data(data)
-        end
-      end)
-    end,
-    on_error = function(err)
-      if err.exit == 23 then
-        local xdg_runtime_dir = os.getenv("XDG_RUNTIME_DIR")
-        if not xdg_runtime_dir or fn.isdirectory(xdg_runtime_dir) == 0 then
-          Utils.error(
-            "$XDG_RUNTIME_DIR="
-              .. xdg_runtime_dir
-              .. " is set but does not exist. curl could not write output. Please make sure it exists, or unset.",
-            { title = "Avante" }
-          )
-        elseif not uv.fs_access(xdg_runtime_dir, "w") then
-          Utils.error(
-            "$XDG_RUNTIME_DIR="
-              .. xdg_runtime_dir
-              .. " exists but is not writable. curl could not write output. Please make sure it is writable, or unset.",
-            { title = "Avante" }
-          )
-        end
-      end
-
-      active_job = nil
-      if not completed then
-        completed = true
-        cleanup()
-        handler_opts.on_stop({ reason = "error", error = err })
-      end
-    end,
-    callback = function(result)
-      active_job = nil
-      cleanup()
-      local headers_map = vim.iter(result.headers):fold({}, function(acc, value)
-        local pieces = vim.split(value, ":")
-        local key = pieces[1]
-        local remain = vim.list_slice(pieces, 2)
-        if not remain then return acc end
-        local val = Utils.trim_spaces(table.concat(remain, ":"))
-        acc[key] = val
-        return acc
-      end)
-      if result.status >= 400 then
-        if provider.on_error then
-          provider.on_error(result)
-        else
-          Utils.error("API request failed with status " .. result.status, { once = true, title = "Avante" })
-        end
-        local retry_after = 10
-        if headers_map["retry-after"] then retry_after = tonumber(headers_map["retry-after"]) or 10 end
-        if result.status == 429 then
-          handler_opts.on_stop({ reason = "rate_limit", retry_after = retry_after })
+        if err then
+          completed = true
+          handler_opts.on_stop({ reason = "error", error = err })
           return
         end
+        if not data then return end
+        if Config.debug then
+          if type(data) == "string" then
+            local file = io.open(resp_body_file, "a")
+            if file then
+              file:write(data .. "\n")
+              file:close()
+            end
+          end
+        end
         vim.schedule(function()
-          if not completed then
-            completed = true
-            handler_opts.on_stop({
-              reason = "error",
-              error = "API request failed with status " .. result.status .. ". Body: " .. vim.inspect(result.body),
-            })
+          if provider.parse_stream_data ~= nil then
+            provider:parse_stream_data(turn_ctx, data, handler_opts)
+          else
+            parse_stream_data(data)
           end
         end)
-      end
-
-      -- If stream is not enabled, then handle the response here
-      if provider:is_disable_stream() and result.status == 200 then
-        vim.schedule(function()
-          completed = true
-          parse_response_without_stream(result.body)
-        end)
-      end
-
-      if result.status == 200 and spec.url:match("https://openrouter.ai") then
-        local content_type = headers_map["content-type"]
-        if content_type and content_type:match("text/html") then
-          handler_opts.on_stop({
-            reason = "error",
-            error = "Your openrouter endpoint setting is incorrect, please set it to https://openrouter.ai/api/v1",
-          })
+      end,
+      on_error = function(err)
+        if err.exit == 23 then
+          local xdg_runtime_dir = os.getenv("XDG_RUNTIME_DIR")
+          if not xdg_runtime_dir or fn.isdirectory(xdg_runtime_dir) == 0 then
+            Utils.error(
+              "$XDG_RUNTIME_DIR="
+                .. xdg_runtime_dir
+                .. " is set but does not exist. curl could not write output. Please make sure it exists, or unset.",
+              { title = "Avante" }
+            )
+          elseif not uv.fs_access(xdg_runtime_dir, "w") then
+            Utils.error(
+              "$XDG_RUNTIME_DIR="
+                .. xdg_runtime_dir
+                .. " exists but is not writable. curl could not write output. Please make sure it is writable, or unset.",
+              { title = "Avante" }
+            )
+          end
         end
-      end
-    end,
-  })
+
+        active_job = nil
+        if not completed then
+          completed = true
+          cleanup()
+          handler_opts.on_stop({ reason = "error", error = err })
+        end
+      end,
+      callback = function(result)
+        active_job = nil
+        cleanup()
+        local headers_map = vim.iter(result.headers):fold({}, function(acc, value)
+          local pieces = vim.split(value, ":")
+          local key = pieces[1]
+          local remain = vim.list_slice(pieces, 2)
+          if not remain then return acc end
+          local val = Utils.trim_spaces(table.concat(remain, ":"))
+          acc[key] = val
+          return acc
+        end)
+        if result.status >= 400 then
+          if provider.on_error then
+            provider.on_error(result)
+          else
+            Utils.error("API request failed with status " .. result.status, { once = true, title = "Avante" })
+          end
+          local retry_after = 10
+          if headers_map["retry-after"] then retry_after = tonumber(headers_map["retry-after"]) or 10 end
+          if result.status == 429 then
+            handler_opts.on_stop({ reason = "rate_limit", retry_after = retry_after })
+            return
+          end
+          vim.schedule(function()
+            if not completed then
+              completed = true
+              handler_opts.on_stop({
+                reason = "error",
+                error = "API request failed with status " .. result.status .. ". Body: " .. vim.inspect(result.body),
+              })
+            end
+          end)
+        end
+
+        -- If stream is not enabled, then handle the response here
+        if provider:is_disable_stream() and result.status == 200 then
+          vim.schedule(function()
+            completed = true
+            parse_response_without_stream(result.body)
+          end)
+        end
+
+        if result.status == 200 and spec.url:match("https://openrouter.ai") then
+          local content_type = headers_map["content-type"]
+          if content_type and content_type:match("text/html") then
+            handler_opts.on_stop({
+              reason = "error",
+              error = "Your openrouter endpoint setting is incorrect, please set it to https://openrouter.ai/api/v1",
+            })
+          end
+        end
+      end,
+    })
+  )
 
   if not started_job then
     local error_msg = vim.inspect(new_active_job)
@@ -833,6 +873,16 @@ function M.curl(opts)
   return active_job
 end
 
+local retry_timer = nil
+local abort_retry_timer = false
+local function stop_retry_timer()
+  if retry_timer then
+    retry_timer:stop()
+    pcall(function() retry_timer:close() end)
+    retry_timer = nil
+  end
+end
+
 ---@param opts AvanteLLMStreamOptions
 function M._stream(opts)
   -- Reset the cancellation flag at the start of a new request
@@ -865,6 +915,18 @@ function M._stream(opts)
   end
 
   local resp_headers = {}
+
+  local function dispatch_cancel_message()
+    local cancelled_text = "\n*[Request cancelled by user.]*\n"
+    if opts.on_chunk then opts.on_chunk(cancelled_text) end
+    if opts.on_messages_add then
+      local message = History.Message:new("assistant", cancelled_text, {
+        just_for_display = true,
+      })
+      opts.on_messages_add({ message })
+    end
+    return opts.on_stop({ reason = "cancelled" })
+  end
 
   ---@type AvanteHandlerOptions
   local handler_opts = {
@@ -980,17 +1042,7 @@ function M._stream(opts)
         })
         if result ~= nil or error ~= nil then return handle_tool_result(result, error) end
       end
-      if stop_opts.reason == "cancelled" then
-        local cancelled_text = "\n*[Request cancelled by user.]*\n"
-        if opts.on_chunk then opts.on_chunk(cancelled_text) end
-        if opts.on_messages_add then
-          local message = History.Message:new("assistant", cancelled_text, {
-            just_for_display = true,
-          })
-          opts.on_messages_add({ message })
-        end
-        return opts.on_stop({ reason = "cancelled" })
-      end
+      if stop_opts.reason == "cancelled" then dispatch_cancel_message() end
       local history_messages = opts.get_history_messages and opts.get_history_messages({ all = true }) or {}
       local pending_tools, pending_tool_use_messages = History.get_pending_tools(history_messages)
       if stop_opts.reason == "complete" and Config.mode == "agentic" then
@@ -1068,37 +1120,42 @@ function M._stream(opts)
             }
           )
 
-        local timer = vim.loop.new_timer()
-        if timer then
-          local retry_count = stop_opts.retry_after
-          Utils.info("Rate limit reached. Retrying in " .. retry_count .. " seconds", { title = "Avante" })
+        local retry_count = stop_opts.retry_after
+        Utils.info("Rate limit reached. Retrying in " .. retry_count .. " seconds", { title = "Avante" })
 
-          local function countdown()
-            local msg_content = "*[Rate limit reached. Retrying in " .. retry_count .. " seconds ...]*"
-            if opts.on_chunk then
-              -- Use ANSI escape codes to clear line and move cursor up only for subsequent updates
-              local prefix = ""
-              if retry_count < stop_opts.retry_after then prefix = [[\033[1A\033[K]] end
-              opts.on_chunk(prefix .. "\n" .. msg_content .. "\n")
-            end
-            if opts.on_messages_add and message then
-              message:update_content("\n\n" .. msg_content)
-              opts.on_messages_add({ message })
-            end
-
-            if retry_count <= 0 then
-              timer:stop()
-              pcall(function() timer:close() end)
-
-              Utils.info("Restarting stream after rate limit pause")
-              M._stream(opts)
-            else
-              retry_count = retry_count - 1
-            end
+        local function countdown()
+          if abort_retry_timer then
+            Utils.info("Retry aborted due to user requested cancellation.")
+            stop_retry_timer()
+            dispatch_cancel_message()
+            return
           end
 
-          timer:start(0, 1000, vim.schedule_wrap(function() countdown() end))
+          local msg_content = "*[Rate limit reached. Retrying in " .. retry_count .. " seconds ...]*"
+          if opts.on_chunk then
+            -- Use ANSI escape codes to clear line and move cursor up only for subsequent updates
+            local prefix = ""
+            if retry_count < stop_opts.retry_after then prefix = [[\033[1A\033[K]] end
+            opts.on_chunk(prefix .. "\n" .. msg_content .. "\n")
+          end
+          if opts.on_messages_add and message then
+            message:update_content("\n\n" .. msg_content)
+            opts.on_messages_add({ message })
+          end
+
+          if retry_count <= 0 then
+            stop_retry_timer()
+
+            Utils.info("Restarting stream after rate limit pause")
+            M._stream(opts)
+          else
+            retry_count = retry_count - 1
+          end
         end
+
+        stop_retry_timer()
+        retry_timer = uv.new_timer()
+        if retry_timer then retry_timer:start(0, 1000, vim.schedule_wrap(function() countdown() end)) end
         return
       end
       return opts.on_stop(stop_opts)
@@ -1242,6 +1299,7 @@ function M.stream(opts)
 
   opts.mode = opts.mode or Config.mode
 
+  abort_retry_timer = false
   if Config.dual_boost.enabled and valid_dual_boost_modes[opts.mode] then
     M._dual_boost_stream(
       opts,
@@ -1259,6 +1317,7 @@ function M.cancel_inflight_request()
     LLMToolHelpers.confirm_popup:cancel()
     LLMToolHelpers.confirm_popup = nil
   end
+  abort_retry_timer = true
 
   api.nvim_exec_autocmds("User", { pattern = M.CANCEL_PATTERN })
 end

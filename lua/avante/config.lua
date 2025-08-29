@@ -26,7 +26,7 @@ M._defaults = {
   ---@alias avante.Mode "agentic" | "legacy"
   ---@type avante.Mode
   mode = "agentic",
-  ---@alias avante.ProviderName "claude" | "openai" | "azure" | "gemini" | "vertex" | "cohere" | "copilot" | "bedrock" | "ollama" | string
+  ---@alias avante.ProviderName "claude" | "openai" | "azure" | "gemini" | "vertex" | "cohere" | "copilot" | "bedrock" | "ollama" | "watsonx_code_assistant" | string
   ---@type avante.ProviderName
   provider = "claude",
   -- WARNING: Since auto-suggestions are a high-frequency operation and therefore expensive,
@@ -291,7 +291,14 @@ M._defaults = {
     },
     ---@type AvanteSupportedProvider
     bedrock = {
-      model = "anthropic.claude-3-5-sonnet-20241022-v2:0",
+      model = "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+      model_names = {
+        "anthropic.claude-3-5-sonnet-20241022-v2:0",
+        "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
+        "us.anthropic.claude-opus-4-20250514-v1:0",
+        "us.anthropic.claude-opus-4-1-20250805-v1:0",
+        "us.anthropic.claude-sonnet-4-20250514-v1:0",
+      },
       timeout = 30000, -- Timeout in milliseconds
       extra_request_body = {
         temperature = 0.75,
@@ -349,6 +356,16 @@ M._defaults = {
       },
     },
     ---@type AvanteSupportedProvider
+    watsonx_code_assistant = {
+      endpoint = "https://api.dataplatform.cloud.ibm.com/v2/wca/core/chat/text/generation",
+      model = "granite-8b-code-instruct",
+      timeout = 30000, -- Timeout in milliseconds
+      extra_request_body = {
+        -- Additional watsonx-specific parameters can be added here
+      },
+    },
+
+    ---@type AvanteSupportedProvider
     vertex_claude = {
       endpoint = "https://LOCATION-aiplatform.googleapis.com/v1/projects/PROJECT_ID/locations/LOCATION/publishers/antrhopic/models",
       model = "claude-3-5-sonnet-v2@20241022",
@@ -393,13 +410,6 @@ M._defaults = {
       endpoint = "https://aihubmix.com",
       model = "claude-3-7-sonnet-20250219",
       api_key_name = "AIHUBMIX_API_KEY",
-    },
-    ["bedrock-claude-3.7-sonnet"] = {
-      __inherited_from = "bedrock",
-      model = "us.anthropic.claude-3-7-sonnet-20250219-v1:0",
-      extra_request_body = {
-        max_tokens = 4096,
-      },
     },
     morph = {
       __inherited_from = "openai",
@@ -524,6 +534,7 @@ M._defaults = {
     -- NOTE: The following will be safely set by avante.nvim
     ask = "<leader>aa",
     new_ask = "<leader>an",
+    full_view_ask = "<leader>am",
     edit = "<leader>ae",
     refresh = "<leader>ar",
     focus = "<leader>af",
